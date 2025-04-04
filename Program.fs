@@ -207,6 +207,23 @@ let view model dispatch =
 
 
     React.fragment [
+        Html.p [
+            Html.text "This demo accompanies a "
+            Html.a [
+                prop.text "blog post"
+                prop.href "" //TODO blog post permalink
+            ]
+            Html.text
+                " about unwanted behaviour when polling using the React.UseElmish hook without implementing iDisposable on the model."
+        ]
+        Html.p "Select a different mode to see the behaviors."
+        Html.p [
+            Html.a [
+                prop.text "Source code"
+                prop.href "https://github.com/CompositionalIT/demo-elmish-polling"
+            ]
+        ]
+
         for view in [ View.BrokenUseElmish; View.Composed; View.FixedUseElmish ] do
             Html.button [ prop.text view.Name; prop.onClick (fun _ -> view |> SwitchView |> dispatch) ]
 

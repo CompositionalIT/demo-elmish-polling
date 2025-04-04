@@ -6,5 +6,6 @@ export default defineConfig({
     plugins: [fable()],
     server: {
         port: 8080
-    }
+    },
+    base: "/demo-elmish-polling/"
 });
