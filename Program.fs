@@ -2,10 +2,44 @@
 
 
 open Browser.Dom
+open Elmish
+open Elmish.React
+
+
+module Composed =
+
+    type Model = { counter: int }
+
+    type Msg =
+        | Loop
+        | PollAction
+
+    let init _ = { counter = 0 }, Cmd.ofMsg Loop
+
+    let update msg model =
+
+        match msg with
+        | PollAction ->
+            {
+                model with
+                    counter = model.counter + 1
+            },
+            Cmd.none
+
+        | Loop ->
+            model,
+            Cmd.batch [
+                Cmd.ofMsg PollAction
+                Cmd.OfAsync.perform (fun _ -> Async.Sleep 1000) () (fun _ -> Loop)
+            ]
+
+    [<ReactComponent>]
+    let View model _ =
+
+        Html.p $"Counter: {model.counter}"
 
 module BrokenElmish =
     open Feliz.UseElmish
-    open Elmish
 
     type Model = { counter: int }
 
@@ -22,7 +56,7 @@ module BrokenElmish =
 
         match msg with
         | PollAction ->
-            sendMessage $"this message came from the broken loop: {model.counter}"
+            sendMessage $"this message came from the broken loop"
 
             {
                 model with
@@ -41,16 +75,12 @@ module BrokenElmish =
     let View sendMessage =
         let model, _ = React.useElmish (init, update sendMessage, [])
 
-        Html.div [
-            prop.key "broken-elmish"
-            prop.children [ Html.h2 "Broken Elmish loop"; Html.p $"inner counter: {model.counter}" ]
-        ]
+        Html.p $"Counter: {model.counter}"
 
 
 
 module FixedElmish =
     open Feliz.UseElmish
-    open Elmish
 
     type Model = {
         counter: int
@@ -72,7 +102,7 @@ module FixedElmish =
     let update sendMessage msg model =
         match msg with
         | PollAction ->
-            sendMessage $"this message came from the fixed loop {model.counter}"
+            sendMessage $"this message came from the fixed loop"
 
             {
                 model with
@@ -83,7 +113,7 @@ module FixedElmish =
         | Loop ->
 
             let nextPoll =
-                match model.looping with
+                match model.disposed with
                 | true -> Cmd.none
                 | false -> Cmd.OfAsync.perform (fun _ -> Async.Sleep 1000) () (fun _ -> Loop)
 
@@ -93,36 +123,109 @@ module FixedElmish =
     let View sendMessage =
         let model, _ = React.useElmish (init, update sendMessage, [])
 
-        Html.div [
-            prop.key "fixed-loop"
-            prop.children [
+        Html.p $"Counter: {model.counter}"
 
-                Html.h2 "Fixed elmish loop"
-                Html.p $"inner counter: {model.counter}"
-            ]
-        ]
+
+[<RequireQualifiedAccess>]
+type View =
+    | FixedUseElmish
+    | BrokenUseElmish
+    | Composed
+
+    member this.Name =
+        match this with
+        | FixedUseElmish -> "Fixed use Elmish"
+        | BrokenUseElmish -> "Broken use Elmish"
+        | Composed -> "Composed"
+
+[<RequireQualifiedAccess>]
+type Page =
+    | FixedUseElmish
+    | BrokenUseElmish
+    | Composed of Composed.Model
+
+    member this.View =
+        match this with
+        | FixedUseElmish -> View.FixedUseElmish
+        | BrokenUseElmish -> View.BrokenUseElmish
+        | Composed _ -> View.Composed
+
+type model = { Page: Page; Messages: string list }
+
+type Msg =
+    | SwitchView of View
+    | ComposedMessage of Composed.Msg
+    | ReceiveMessage of string
+
+let init () =
+    {
+        Page = Page.FixedUseElmish
+        Messages = []
+    },
+    Cmd.none
+
+let update msg model =
+    match msg with
+    | ReceiveMessage m ->
+        {
+            model with
+                Messages = m :: model.Messages
+        },
+        Cmd.none
+    | SwitchView v ->
+        let page, cmd =
+            match v with
+            | View.FixedUseElmish -> Page.FixedUseElmish, Cmd.none
+            | View.BrokenUseElmish -> Page.BrokenUseElmish, Cmd.none
+            | View.Composed ->
+                let composedModel, composedMessage = Composed.init ()
+
+                Page.Composed composedModel, Cmd.map ComposedMessage composedMessage
+
+        { model with Page = page }, cmd
+    | ComposedMessage message ->
+        let outerCmd =
+            match message with
+            | Composed.Msg.PollAction -> Cmd.ofMsg (ReceiveMessage "This message came from the child loop")
+            | _ -> Cmd.none
+
+        let page, cmd =
+            match model.Page with
+            | Page.Composed model ->
+                let updatedMessage, newCommand = Composed.update message model
+
+                Page.Composed updatedMessage, Cmd.map ComposedMessage newCommand
+            | other -> other, Cmd.none
+
+        { model with Page = page }, Cmd.batch [ outerCmd; cmd ]
+
+
+
 
 [<ReactComponent>]
-let Body () =
-    let showingElmish, setShowingElmish = React.useStateWithUpdater false
-    let messages, updateMessages = React.useStateWithUpdater []
+let view model dispatch =
 
-    let saveMessage =
-        fun m ->
-            printfn $"saving message {m}"
-            updateMessages (fun messages -> m :: messages)
 
     React.fragment [
-        Html.button [ prop.text "toggle elmish"; prop.onClick (fun v -> setShowingElmish (not)) ]
-        if showingElmish then
-            yield! [ BrokenElmish.View saveMessage; FixedElmish.View saveMessage ]
+        for view in [ View.BrokenUseElmish; View.Composed; View.FixedUseElmish ] do
+            Html.button [ prop.text view.Name; prop.onClick (fun _ -> view |> SwitchView |> dispatch) ]
+
+
+        Html.h2 model.Page.View.Name
+
+        match model.Page with
+        | Page.BrokenUseElmish -> BrokenElmish.View(ReceiveMessage >> dispatch)
+        | Page.FixedUseElmish -> FixedElmish.View(ReceiveMessage >> dispatch)
+        | Page.Composed model -> Composed.View model ()
+
+        Html.h2 "Messages"
         Html.ul [
-            for message: string in messages do
+            for message: string in model.Messages do
                 Html.li message
         ]
     ]
 
 
-
-let root = ReactDOM.createRoot (document.getElementById "app")
-root.render (Body())
+Program.mkProgram init update view
+|> Program.withReactSynchronous "app"
+|> Program.run
