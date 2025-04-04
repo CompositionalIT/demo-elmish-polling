@@ -3,61 +3,122 @@
 
 open Browser.Dom
 
-module Elmish =
+module BrokenElmish =
     open Feliz.UseElmish
     open Elmish
 
-    type Model =
-        { counter: int
-          mutable disposed: bool }
+    type Model = { counter: int }
+
+    type Msg =
+        | Loop
+        | PollAction
+
+    let init _ =
+        printfn "initializing broken loop"
+        { counter = 0 }, Cmd.ofMsg Loop
+
+    let update sendMessage msg model =
+        printfn "calling update on the broken loops"
+
+        match msg with
+        | PollAction ->
+            sendMessage $"this message came from the broken loop: {model.counter}"
+
+            {
+                model with
+                    counter = model.counter + 1
+            },
+            Cmd.none
+
+        | Loop ->
+            model,
+            Cmd.batch [
+                Cmd.ofMsg PollAction
+                Cmd.OfAsync.perform (fun _ -> Async.Sleep 1000) () (fun _ -> Loop)
+            ]
+
+    [<ReactComponent>]
+    let View sendMessage =
+        let model, _ = React.useElmish (init, update sendMessage, [])
+
+        Html.div [
+            prop.key "broken-elmish"
+            prop.children [ Html.h2 "Broken Elmish loop"; Html.p $"inner counter: {model.counter}" ]
+        ]
+
+
+
+module FixedElmish =
+    open Feliz.UseElmish
+    open Elmish
+
+    type Model = {
+        counter: int
+        mutable disposed: bool
+    } with
 
         interface System.IDisposable with
             member this.Dispose() = this.disposed <- true
 
     type Msg =
-        | Poll
-        | IncrementCounters
+        | Loop
+        | PollAction
 
     let init _ =
-        { counter = 0; disposed = false }, Cmd.ofMsg Poll
+        { counter = 0; disposed = false }, Cmd.ofMsg Loop
 
-    let update updateCounter msg model =
+    let update sendMessage msg model =
         match msg with
-        | IncrementCounters ->
-            updateCounter ((+) 1)
+        | PollAction ->
+            sendMessage $"this message came from the fixed loop {model.counter}"
 
-            { model with
-                counter = model.counter + 1 },
+            {
+                model with
+                    counter = model.counter + 1
+            },
             Cmd.none
 
-        | Poll ->
-            printfn "polling"
+        | Loop ->
 
             let nextPoll =
                 match model.disposed with
                 | true -> Cmd.none
-                | false -> Cmd.OfAsync.perform (fun _ -> Async.Sleep 1000) () (fun _ -> Poll)
+                | false -> Cmd.OfAsync.perform (fun _ -> Async.Sleep 1000) () (fun _ -> Loop)
 
-            model, Cmd.batch [ nextPoll; Cmd.ofMsg IncrementCounters ]
+            model, Cmd.batch [ nextPoll; Cmd.ofMsg PollAction ]
 
     [<ReactComponent>]
-    let View updateCounter =
-        let model, _ = React.useElmish (init, update updateCounter, [])
+    let View sendMessage =
+        let model, _ = React.useElmish (init, update sendMessage, [])
 
-        Html.p $"inner counter: {model.counter}"
+        Html.div [
+            prop.key "fixed-loop"
+            prop.children [
+
+                Html.h2 "Fixed elmish loop"
+                Html.p $"inner counter: {model.counter}"
+            ]
+        ]
 
 [<ReactComponent>]
 let Body () =
     let showingElmish, setShowingElmish = React.useStateWithUpdater false
-    let counter, setCounter = React.useStateWithUpdater 0
+    let messages, updateMessages = React.useStateWithUpdater []
 
-    React.fragment
-        [ Html.p $"counter {counter}"
-          Html.button [ prop.text "toggle elmish"; prop.onClick (fun v -> setShowingElmish (not)) ]
-          if showingElmish then
-              Elmish.View setCounter
-          else
-              Html.p "not showing elmish loop" ]
+    let saveMessage =
+        fun m ->
+            printfn $"saving message {m}"
+            updateMessages (fun messages -> m :: messages)
+
+    React.fragment [
+        Html.button [ prop.text "toggle elmish"; prop.onClick (fun v -> setShowingElmish (not)) ]
+        if showingElmish then
+            yield! [ BrokenElmish.View saveMessage; FixedElmish.View saveMessage ]
+        Html.ul [
+            for message: string in messages do
+                Html.li message
+        ]
+    ]
 
 
 
