@@ -60,6 +60,8 @@ module FixedElmish =
         interface System.IDisposable with
             member this.Dispose() = this.disposed <- true
 
+        member this.looping = not this.disposed
+
     type Msg =
         | Loop
         | PollAction
@@ -81,7 +83,7 @@ module FixedElmish =
         | Loop ->
 
             let nextPoll =
-                match model.disposed with
+                match model.looping with
                 | true -> Cmd.none
                 | false -> Cmd.OfAsync.perform (fun _ -> Async.Sleep 1000) () (fun _ -> Loop)
 
