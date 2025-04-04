@@ -36,15 +36,7 @@ module Elmish =
             let nextPoll =
                 match model.disposed with
                 | true -> Cmd.none
-                | false ->
-                    Cmd.OfAsync.perform
-                        (fun _ ->
-                            async {
-                                do! Async.Sleep 1000
-
-                            })
-                        ()
-                        (fun _ -> Poll)
+                | false -> Cmd.OfAsync.perform (fun _ -> Async.Sleep 1000) () (fun _ -> Poll)
 
             model, Cmd.batch [ nextPoll; Cmd.ofMsg IncrementCounters ]
 
