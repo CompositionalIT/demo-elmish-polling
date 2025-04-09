@@ -211,7 +211,7 @@ let view model dispatch =
             Html.text "This demo accompanies a "
             Html.a [
                 prop.text "blog post"
-                prop.href "" //TODO blog post permalink
+                prop.href "https://www.compositional-it.com/news-blog/managing-loops-in-composed-elmish/" 
             ]
             Html.text
                 " about unwanted behaviour when polling using the React.UseElmish hook without implementing iDisposable on the model."
