@@ -38,7 +38,7 @@ module Composed =
 
         Html.p $"Counter: {model.counter}"
 
-module BrokenElmish =
+module BrokenUseElmish =
     open Feliz.UseElmish
 
     type Model = { counter: int }
@@ -79,7 +79,7 @@ module BrokenElmish =
 
 
 
-module FixedElmish =
+module FixedUseElmish =
     open Feliz.UseElmish
 
     type Model = {
@@ -231,8 +231,8 @@ let view model dispatch =
         Html.h2 model.Page.View.Name
 
         match model.Page with
-        | Page.BrokenUseElmish -> BrokenElmish.View(ReceiveMessage >> dispatch)
-        | Page.FixedUseElmish -> FixedElmish.View(ReceiveMessage >> dispatch)
+        | Page.BrokenUseElmish -> BrokenUseElmish.View(ReceiveMessage >> dispatch)
+        | Page.FixedUseElmish -> FixedUseElmish.View(ReceiveMessage >> dispatch)
         | Page.Composed model -> Composed.View model ()
 
         Html.h2 "Messages"
